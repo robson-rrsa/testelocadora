@@ -1,25 +1,41 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { TableClient, TableServiceClient } = require("@azure/data-tables");
 const { BlobServiceClient } = require("@azure/storage-blob");
 const multer = require('multer');
-const path = require('path');
 const serverless = require('serverless-http');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ----------------------------
-// Variáveis globais e flag de inicialização
-// ----------------------------
+// ====================
+// CONFIGURAÇÃO DAS ROTAS DO FRONTEND
+// ====================
+
+// Rota principal que serve o index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Rota para a página de administração
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Serve arquivos estáticos (CSS, JS, imagens) - funciona localmente
+// NO VERCEL: express.static() é ignorado, arquivos são servidos automaticamente da pasta 'public' :cite[1]
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ====================
+// INICIALIZAÇÃO ADIADA DO AZURE
+// ====================
+
 let azureInitialized = false;
 let containerClient, tabelaVeiculos, tabelaClientes, tabelaLocacoes;
 
-// ----------------------------
-// Funções de inicialização do Azure
-// ----------------------------
 async function inicializarAzure() {
     if (azureInitialized) return;
     
@@ -74,9 +90,7 @@ async function inicializarAzure() {
     }
 }
 
-// ----------------------------
-// Middleware para garantir inicialização do Azure
-// ----------------------------
+// Middleware para garantir inicialização do Azure antes das rotas da API
 app.use(async (req, res, next) => {
     try {
         if (!azureInitialized) {
@@ -92,18 +106,16 @@ app.use(async (req, res, next) => {
     }
 });
 
-// ----------------------------
-// Configuração do Multer
-// ----------------------------
+// ====================
+// ROTAS DA API (MANTIDAS COMO NO SEU CÓDIGO ORIGINAL)
+// ====================
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 function normalizarNomeArquivo(nome) {
     return nome.replace(/[^a-zA-Z0-9\-_.]/g, '_');
 }
 
-// ----------------------------
-// Rotas de Upload
-// ----------------------------
 app.post('/upload-veiculo', upload.single('imagem'), async (req, res) => {
     try {
         const nomeArquivo = normalizarNomeArquivo(req.file.originalname);
@@ -115,9 +127,6 @@ app.post('/upload-veiculo', upload.single('imagem'), async (req, res) => {
     }
 });
 
-// ----------------------------
-// Rotas de Veículos
-// ----------------------------
 app.post('/veiculos', upload.single('imagem'), async (req, res) => {
     try {
         let urlImagem = '';
@@ -148,6 +157,57 @@ app.post('/veiculos', upload.single('imagem'), async (req, res) => {
     }
 });
 
+app.post('/clientes', async (req, res) => {
+    try {
+        const { nome, email, telefone } = req.body;
+
+        await tabelaClientes.createEntity({
+            partitionKey: 'Cliente',
+            rowKey: Date.now().toString(),
+            nome,
+            email,
+            telefone
+        });
+
+        res.json({ sucesso: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/clientes', async (req, res) => { 
+    try {
+        const iter = tabelaClientes.listEntities();
+        const clientes = [];
+        for await (const c of iter) clientes.push(c);
+        res.json(clientes);
+    } catch (err) {
+        console.error('Erro ao buscar clientes:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/clientes/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nome, email, telefone } = req.body;
+
+        const cliente = await tabelaClientes.getEntity("Cliente", id);
+        await tabelaClientes.updateEntity({
+            partitionKey: cliente.partitionKey,
+            rowKey: cliente.rowKey,
+            nome,
+            email,
+            telefone
+        }, "Merge");
+
+        res.json({ sucesso: true });
+    } catch (err) {
+        console.error('Erro ao atualizar cliente:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/veiculos/disponiveis', async (req, res) => {
     try {
         const { marca, modelo } = req.query;
@@ -163,7 +223,7 @@ app.get('/veiculos/disponiveis', async (req, res) => {
                     modelo: v.modelo,
                     ano: v.ano,
                     urlImagem: v.urlImagem,
-                    placa: v.rowKey,
+                    placa: v.rowKey, 
                     precoDiaria: v.precoDiaria,
                     disponivel: v.disponivel
                 });
@@ -205,60 +265,6 @@ app.get('/marcas', async (req, res) => {
         res.json(Array.from(marcas));
     } catch (err) {
         console.error('Erro ao buscar marcas:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ----------------------------
-// Rotas de Clientes
-// ----------------------------
-app.post('/clientes', async (req, res) => {
-    try {
-        const { nome, email, telefone } = req.body;
-
-        await tabelaClientes.createEntity({
-            partitionKey: 'Cliente',
-            rowKey: Date.now().toString(),
-            nome,
-            email,
-            telefone
-        });
-
-        res.json({ sucesso: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.get('/clientes', async (req, res) => {
-    try {
-        const iter = tabelaClientes.listEntities();
-        const clientes = [];
-        for await (const c of iter) clientes.push(c);
-        res.json(clientes);
-    } catch (err) {
-        console.error('Erro ao buscar clientes:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.put('/clientes/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { nome, email, telefone } = req.body;
-
-        const cliente = await tabelaClientes.getEntity("Cliente", id);
-        await tabelaClientes.updateEntity({
-            partitionKey: cliente.partitionKey,
-            rowKey: cliente.rowKey,
-            nome,
-            email,
-            telefone
-        }, "Merge");
-
-        res.json({ sucesso: true });
-    } catch (err) {
-        console.error('Erro ao atualizar cliente:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -309,9 +315,6 @@ app.delete('/clientes/:id', async (req, res) => {
     }
 });
 
-// ----------------------------
-// Rotas de Locações
-// ----------------------------
 app.post('/locacoes', async (req, res) => {
     try {
         const { placaVeiculo, clienteId, dataInicio, dataFim, valor } = req.body;
@@ -437,33 +440,9 @@ app.get('/veiculos/alugados', async (req, res) => {
     }
 });
 
-// ----------------------------
-// Health Check para testar inicialização
-// ----------------------------
-app.get('/health', async (req, res) => {
-    try {
-        if (!azureInitialized) {
-            await inicializarAzure();
-        }
-        res.json({ 
-            status: 'healthy', 
-            azureInitialized: azureInitialized,
-            timestamp: new Date().toISOString()
-        });
-    } catch (err) {
-        res.status(500).json({ 
-            status: 'unhealthy', 
-            error: err.message 
-        });
-    }
-});
-
-// ----------------------------
-// Configuração do servidor
-// ----------------------------
-
-// NOTA: Removemos o express.static pois o Vercel serve arquivos estáticos automaticamente
-// app.use(express.static('public')); // REMOVIDO
+// ====================
+// CONFIGURAÇÃO FINAL DO SERVIDOR
+// ====================
 
 const PORT = process.env.PORT || 3000;
 
