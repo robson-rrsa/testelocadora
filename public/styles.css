@@ -1,0 +1,82 @@
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background-color: #121212;
+  color: #e0e0e0;
+  margin: 0;
+  padding: 20px;
+}
+
+h1, h2, h3 {
+  color: #00bfff; /* azul */
+}
+
+.container {
+  max-width: 900px;
+  margin: auto;
+}
+
+.card {
+  background-color: #1e1e1e;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,255,128,0.2); /* verde suave */
+}
+
+label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+input, select {
+  padding: 8px;
+  width: 100%;
+  margin-top: 5px;
+  border-radius: 5px;
+  border: none;
+  background-color: #2a2a2a;
+  color: #e0e0e0;
+}
+
+input::placeholder {
+  color: #888;
+}
+
+button {
+  padding: 10px 20px;
+  margin-top: 10px;
+  background-color: #00bfff; /* azul */
+  color: #121212;
+  border: none;
+  border-radius: 5px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #00ff7f; /* verde */
+}
+
+.nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.nav button {
+  background-color: #00bfff;
+  color: #121212;
+}
+
+.nav button:hover {
+  background-color: #00ff7f;
+}
+
+.alugado {
+  background-color: #2a2a2a;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 8px;
+}

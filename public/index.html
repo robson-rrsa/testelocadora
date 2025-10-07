@@ -1,0 +1,317 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Locadora - Usuário</title>
+    <link rel="stylesheet" href="styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <div class="nav">
+        <button onclick="window.location.href='index.html'">Usuário</button>
+        <button onclick="window.location.href='admin.html'">Admin</button>
+    </div>
+
+    <div class="container">
+        <h1>Locação de Veículos</h1>
+
+        <div class="card">
+            <h2>Buscar Veículos Disponíveis</h2>
+            <div class="filtros">
+                <label>Marca:
+                    <select id="marcaSelect">
+                        <option value="">Selecione a marca</option>
+                    </select>
+                </label>
+                <label>Modelo:
+                    <select id="modeloSelect" disabled>
+                        <option value="">Selecione o modelo</option>
+                    </select>
+                </label>
+                <button onclick="buscarVeiculos()">Buscar Veículos</button>
+            </div>
+
+            <div id="loadingVeiculos" class="loading" style="display: none;">
+                Carregando veículos...
+            </div>
+
+            <div id="veiculosLista"></div>
+        </div>
+
+        <div class="card" id="detalhesLocacao" style="display: none;">
+            <h2>Realizar Locação</h2>
+            <div id="detalhesVeiculo"></div>
+            <form id="formLocacao">
+                <label>Cliente:
+                    <select id="clienteSelect" required>
+                        <option value="">Selecione o cliente</option>
+                    </select>
+                </label>
+                <label>Data Início:
+                    <input type="date" id="dataInicio" required>
+                </label>
+                <label>Data Fim:
+                    <input type="date" id="dataFim" required>
+                </label>
+                <div id="resumoLocacao" style="margin: 1rem 0; padding: 1rem; background: #f8f9fa; border-radius: 8px;"></div>
+                <button type="submit">Confirmar Locação</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let veiculoSelecionado = null;
+        let clientes = [];
+
+      
+        async function carregarMarcas() {
+            try {
+                const res = await fetch('/marcas');
+                if (!res.ok) throw new Error('Erro ao carregar marcas');
+                const marcas = await res.json();
+                const select = document.getElementById('marcaSelect');
+                
+                marcas.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m;
+                    opt.textContent = m;
+                    select.appendChild(opt);
+                });
+            } catch (err) {
+                console.error('Erro:', err);
+                alert('Erro ao carregar marcas');
+            }
+        }
+
+       
+        document.getElementById('marcaSelect').addEventListener('change', async e => {
+            const marca = e.target.value;
+            const modeloSelect = document.getElementById('modeloSelect');
+            modeloSelect.innerHTML = '<option value="">Selecione o modelo</option>';
+            modeloSelect.disabled = !marca;
+
+            if (!marca) return;
+
+            try {
+                const res = await fetch('/modelos/' + encodeURIComponent(marca));
+                if (!res.ok) throw new Error('Erro ao carregar modelos');
+                const modelos = await res.json();
+                
+                modelos.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m;
+                    opt.textContent = m;
+                    modeloSelect.appendChild(opt);
+                });
+            } catch (err) {
+                console.error('Erro:', err);
+                alert('Erro ao carregar modelos');
+            }
+        });
+
+        
+        async function buscarVeiculos() {
+            const marca = document.getElementById('marcaSelect').value;
+            const modelo = document.getElementById('modeloSelect').value;
+            const loading = document.getElementById('loadingVeiculos');
+            const lista = document.getElementById('veiculosLista');
+
+            loading.style.display = 'block';
+            lista.innerHTML = '';
+
+            try {
+                let url = '/veiculos/disponiveis';
+                const params = new URLSearchParams();
+                if (marca) params.append('marca', marca);
+                if (modelo) params.append('modelo', modelo);
+                
+                if (params.toString()) url += '?' + params.toString();
+
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Erro ao buscar veículos');
+                const veiculos = await res.json();
+
+                if (veiculos.length === 0) {
+                    lista.innerHTML = '<div class="error">Nenhum veículo encontrado com os filtros selecionados.</div>';
+                    return;
+                }
+
+                veiculos.forEach(veiculo => {
+                    const div = document.createElement('div');
+                    div.className = 'alugado';
+                    div.innerHTML = `
+                        <div class="veiculo-item">
+                            ${veiculo.urlImagem ? 
+                                `<img src="${veiculo.urlImagem}" alt="${veiculo.marca} ${veiculo.modelo}" width="150" style="border-radius: 8px;">` : 
+                                '<div style="width: 150px; height: 100px; background: #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #666;">Sem imagem</div>'
+                            }
+                            <div class="veiculo-info">
+                                <h3>${veiculo.marca} ${veiculo.modelo} (${veiculo.ano})</h3>
+                                <p><strong>Placa:</strong> ${veiculo.placa}</p>
+                                <p><strong>Preço/diária:</strong> R$ ${veiculo.precoDiaria}</p>
+                                <p><strong>Status:</strong> <span class="status-ativa">Disponível</span></p>
+                            </div>
+                            <div class="veiculo-actions">
+                                <button onclick="selecionarVeiculo('${veiculo.placa}')">Alugar este veículo</button>
+                            </div>
+                        </div>
+                    `;
+                    lista.appendChild(div);
+                });
+
+            } catch (err) {
+                console.error('Erro:', err);
+                lista.innerHTML = '<div class="error">Erro ao carregar veículos: ' + err.message + '</div>';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        
+        async function selecionarVeiculo(placa) {
+            try {
+                const res = await fetch('/veiculos/disponiveis');
+                if (!res.ok) throw new Error('Erro ao buscar veículo');
+                const veiculos = await res.json();
+                veiculoSelecionado = veiculos.find(v => v.placa === placa);
+
+                if (!veiculoSelecionado) {
+                    alert('Veículo não encontrado');
+                    return;
+                }
+
+                // Mostrar detalhes do veículo
+                document.getElementById('detalhesVeiculo').innerHTML = `
+                    <div class="veiculo-item">
+                        ${veiculoSelecionado.urlImagem ? 
+                            `<img src="${veiculoSelecionado.urlImagem}" alt="${veiculoSelecionado.marca} ${veiculoSelecionado.modelo}" width="200">` : 
+                            '<div style="width: 200px; height: 150px; background: #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #666;">Sem imagem</div>'
+                        }
+                        <div class="veiculo-info">
+                            <h3>${veiculoSelecionado.marca} ${veiculoSelecionado.modelo} (${veiculoSelecionado.ano})</h3>
+                            <p><strong>Placa:</strong> ${veiculoSelecionado.placa}</p>
+                            <p><strong>Preço/diária:</strong> R$ ${veiculoSelecionado.precoDiaria}</p>
+                        </div>
+                    </div>
+                `;
+
+                // Carregar clientes
+                await carregarClientes();
+                
+                // Mostrar seção de locação
+                document.getElementById('detalhesLocacao').style.display = 'block';
+                document.getElementById('detalhesLocacao').scrollIntoView({ behavior: 'smooth' });
+
+            } catch (err) {
+                console.error('Erro:', err);
+                alert('Erro ao selecionar veículo: ' + err.message);
+            }
+        }
+
+       
+        async function carregarClientes() {
+            try {
+                const res = await fetch('/clientes');
+                if (!res.ok) throw new Error('Erro ao carregar clientes');
+                clientes = await res.json();
+                const select = document.getElementById('clienteSelect');
+                
+                select.innerHTML = '<option value="">Selecione o cliente</option>';
+                clientes.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.rowKey;
+                    opt.textContent = c.nome + ' - ' + c.email;
+                    select.appendChild(opt);
+                });
+            } catch (err) {
+                console.error('Erro:', err);
+                alert('Erro ao carregar clientes: ' + err.message);
+            }
+        }
+
+        
+        document.getElementById('dataInicio').addEventListener('change', calcularValor);
+        document.getElementById('dataFim').addEventListener('change', calcularValor);
+
+        function calcularValor() {
+            const dataInicio = document.getElementById('dataInicio').value;
+            const dataFim = document.getElementById('dataFim').value;
+            const resumo = document.getElementById('resumoLocacao');
+
+            if (!dataInicio || !dataFim || !veiculoSelecionado) return;
+
+            const inicio = new Date(dataInicio);
+            const fim = new Date(dataFim);
+            const diffTime = Math.abs(fim - inicio);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays <= 0) {
+                resumo.innerHTML = '<div class="error">Data fim deve ser maior que data início</div>';
+                return;
+            }
+
+            const valorTotal = diffDays * veiculoSelecionado.precoDiaria;
+            resumo.innerHTML = `
+                <h4>Resumo da Locação</h4>
+                <p><strong>Período:</strong> ${diffDays} dia(s)</p>
+                <p><strong>Valor diária:</strong> R$ ${veiculoSelecionado.precoDiaria}</p>
+                <p><strong>Valor total:</strong> R$ ${valorTotal.toFixed(2)}</p>
+            `;
+        }
+
+     
+        document.getElementById('formLocacao').addEventListener('submit', async e => {
+            e.preventDefault();
+            
+            const clienteId = document.getElementById('clienteSelect').value;
+            const dataInicio = document.getElementById('dataInicio').value;
+            const dataFim = document.getElementById('dataFim').value;
+
+            if (!clienteId || !dataInicio || !dataFim) {
+                alert('Preencha todos os campos obrigatórios');
+                return;
+            }
+
+            const inicio = new Date(dataInicio);
+            const fim = new Date(dataFim);
+            const diffTime = Math.abs(fim - inicio);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const valorTotal = diffDays * veiculoSelecionado.precoDiaria;
+
+            try {
+                const res = await fetch('/locacoes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        placaVeiculo: veiculoSelecionado.placa,
+                        clienteId: clienteId,
+                        dataInicio: dataInicio,
+                        dataFim: dataFim,
+                        valor: valorTotal
+                    })
+                });
+
+                const resultado = await res.json();
+                
+                if (resultado.sucesso) {
+                    alert('Locação realizada com sucesso!');
+                    // Resetar formulário
+                    document.getElementById('formLocacao').reset();
+                    document.getElementById('detalhesLocacao').style.display = 'none';
+                    document.getElementById('resumoLocacao').innerHTML = '';
+                    // Atualizar lista de veículos
+                    buscarVeiculos();
+                } else {
+                    alert('Erro ao realizar locação: ' + (resultado.mensagem || 'Erro desconhecido'));
+                }
+            } catch (err) {
+                console.error('Erro:', err);
+                alert('Erro ao realizar locação: ' + err.message);
+            }
+        });
+
+        // Inicializar
+        carregarMarcas();
+    </script>
+</body>
+</html>
