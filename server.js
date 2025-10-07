@@ -11,7 +11,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-
+// ----------------------------
+// Variáveis globais e flag de inicialização
+// ----------------------------
 let azureInitialized = false;
 let containerClient, tabelaVeiculos, tabelaClientes, tabelaLocacoes;
 
@@ -456,7 +458,12 @@ app.get('/health', async (req, res) => {
     }
 });
 
+// ----------------------------
+// Configuração do servidor
+// ----------------------------
 
+// NOTA: Removemos o express.static pois o Vercel serve arquivos estáticos automaticamente
+// app.use(express.static('public')); // REMOVIDO
 
 const PORT = process.env.PORT || 3000;
 
